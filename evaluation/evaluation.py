@@ -2,14 +2,16 @@ import math
 
 import numpy as np
 import torch
+from .adversarial import AdversarialEdgeSampler
 from sklearn.metrics import average_precision_score, roc_auc_score
 
 
 def eval_edge_prediction(model, negative_edge_sampler, data, n_neighbors, batch_size=200):
   # Ensures the random sampler uses a seed for evaluation (i.e. we sample always the same
   # negatives for validation / test set)
-  assert negative_edge_sampler.seed is not None
-  negative_edge_sampler.reset_random_state()
+  # assert negative_edge_sampler.seed is not None
+  if negative_edge_sampler.seed is not None:  # to support subset mode
+    negative_edge_sampler.reset_random_state()
 
   val_ap, val_auc = [], []
   with torch.no_grad():
@@ -31,7 +33,10 @@ def eval_edge_prediction(model, negative_edge_sampler, data, n_neighbors, batch_
       edge_idxs_batch = data.edge_idxs[s_idx: e_idx]
 
       size = len(sources_batch)
-      _, negative_samples = negative_edge_sampler.sample(size)
+      if isinstance(negative_edge_sampler, AdversarialEdgeSampler):
+        _, negative_samples = negative_edge_sampler.sample(sources_batch, timestamps_batch[0], timestamps_batch[-1])
+      else:
+        _, negative_samples = negative_edge_sampler.sample(size)
 
       pos_prob, neg_prob = model.compute_edge_probabilities(sources_batch, destinations_batch,
                                                             negative_samples, timestamps_batch,

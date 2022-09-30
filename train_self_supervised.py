@@ -22,6 +22,7 @@ parser.add_argument('-d', '--data', type=str, help='Dataset name (eg. wikipedia 
                     default='wikipedia')
 parser.add_argument('--bs', type=int, default=200, help='Batch_size')
 parser.add_argument('--prefix', type=str, default='', help='Prefix to name the checkpoints')
+parser.add_argument('--subset', type=float, default=1.0, help='only use a subset of training data')
 parser.add_argument('--n_degree', type=int, default=10, help='Number of neighbors to sample')
 parser.add_argument('--n_head', type=int, default=2, help='Number of heads used in attention layer')
 parser.add_argument('--n_epoch', type=int, default=50, help='Number of epochs')
@@ -85,6 +86,7 @@ TIME_DIM = args.time_dim
 USE_MEMORY = args.use_memory
 MESSAGE_DIM = args.message_dim
 MEMORY_DIM = args.memory_dim
+SUBSET = args.subset
 
 Path("./saved_models/").mkdir(parents=True, exist_ok=True)
 Path("./saved_checkpoints/").mkdir(parents=True, exist_ok=True)
@@ -112,6 +114,12 @@ logger.info(args)
 node_features, edge_features, full_data, train_data, val_data, test_data, new_node_val_data, \
 new_node_test_data = get_data(DATA,
                               different_new_nodes_between_val_and_test=args.different_new_nodes, randomize_features=args.randomize_features)
+if SUBSET < 1:
+  train_end_id = math.ceil(len(train_data) * SUBSET)
+  offline_data = train_data.get_subset(train_end_id, len(train_data))
+  train_data = train_data.get_subset(0, train_end_id)
+else:
+  offline_data = None
 
 # Initialize training neighbor finder to retrieve temporal graph
 train_ngh_finder = get_neighbor_finder(train_data, args.uniform)
@@ -233,17 +241,26 @@ for i in range(args.n_runs):
       if USE_MEMORY:
         tgn.memory.detach_memory()
 
-    epoch_time = time.time() - start_epoch
-    epoch_times.append(epoch_time)
 
     ### Validation
     # Validation uses the full graph
     tgn.set_neighbor_finder(full_ngh_finder)
 
+    roll_time = 0.
     if USE_MEMORY:
       # Backup memory at the end of training, so later we can restore it and use it for the
       # validation on unseen nodes
+      if offline_data is not None:
+        tic = time.time()
+        _ = eval_edge_prediction(model=tgn,
+                                 negative_edge_sampler=train_rand_sampler,
+                                 data=offline_data,
+                                 n_neighbors=NUM_NEIGHBORS)
+        roll_time = time.time() - tic
       train_memory_backup = tgn.memory.backup_memory()
+
+    epoch_time = time.time() - start_epoch
+    epoch_times.append(epoch_time)
 
     val_ap, val_auc = eval_edge_prediction(model=tgn,
                                                             negative_edge_sampler=val_rand_sampler,
@@ -282,7 +299,9 @@ for i in range(args.n_runs):
     total_epoch_time = time.time() - start_epoch
     total_epoch_times.append(total_epoch_time)
 
-    logger.info('epoch: {} took {:.2f}s'.format(epoch, total_epoch_time))
+    logger.info('Epoch {:4d} total    took  {:.2f}s'.format(epoch, total_epoch_time))
+    logger.info('Epoch {:4d} rolling  took  {:.2f}s'.format(epoch, roll_time))
+    logger.info('Epoch {:4d} training took  {:.2f}s'.format(epoch, epoch_time))
     logger.info('Epoch mean loss: {}'.format(np.mean(m_loss)))
     logger.info(
       'val auc: {}, new node val auc: {}'.format(val_auc, nn_val_auc))

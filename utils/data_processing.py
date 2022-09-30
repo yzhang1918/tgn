@@ -13,6 +13,17 @@ class Data:
     self.n_interactions = len(sources)
     self.unique_nodes = set(sources) | set(destinations)
     self.n_unique_nodes = len(self.unique_nodes)
+  
+  def __len__(self):
+    return self.n_interactions
+  
+  def get_subset(self, i, j):
+    sources = self.sources[i:j]
+    destinations = self.destinations[i:j]
+    timestamps = self.timestamps[i:j]
+    edge_idxs = self.edge_idxs[i:j]
+    labels = self.labels[i:j]
+    return Data(sources, destinations, timestamps, edge_idxs, labels)
 
 
 def get_data_node_classification(dataset_name, use_validation=False):
