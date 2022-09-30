@@ -69,6 +69,18 @@ python train_supervised.py --use_memory --prefix tgn-attn --n_runs 10
 python train_supervised.py -d reddit --use_memory --prefix tgn-attn-reddit --n_runs 10
 ```
 
+### ~*NEW*~ Model Test
+
+```
+python test_self_supervised.py --use_memory --prefix tgn-attn --neg_type [hist/ind/normal]
+```
+
+### ~*NEW*~ Parse Log
+
+```
+python parse_log.py [path_to_log_file]
+```
+
 ### Baselines
 
 ```{bash}
